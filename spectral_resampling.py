@@ -4,6 +4,7 @@ The implementation in `desispec` is not vectorized along the sample axis.
 Obtained from: https://github.com/ACCarnall/SpectRes/blob/master/spectres/spectral_resampling.py
 Implements the equations from: https://ui.adsabs.harvard.edu/abs/2017arXiv170505165C/abstract
 Coed still involves a bunch of loops which can be eliminated using more vectorization or JIT
+Look at the code from specutils for inspiration
 """
 
 from __future__ import print_function, division, absolute_import
