@@ -3,10 +3,12 @@ Vectorized implementation of the Flux Conserving resampler.
 The implementation in `desispec` is not vectorized along the sample axis.
 Obtained from: https://github.com/ACCarnall/SpectRes/blob/master/spectres/spectral_resampling.py
 Implements the equations from: https://ui.adsabs.harvard.edu/abs/2017arXiv170505165C/abstract
+Coed still involves a bunch of loops which can be eliminated using more vectorization or JIT
 """
 
 from __future__ import print_function, division, absolute_import
 
+from numba import njit
 import numpy as np
 
 
@@ -24,7 +26,9 @@ def make_bins(wavs):
     return edges, widths
 
 
-def spectres(new_wavs, spec_wavs, spec_fluxes, spec_errs=None, fill=None, verbose=True):
+def _spectres(
+    new_wavs, spec_wavs, spec_fluxes, spec_errs=None, fill=None, verbose=True
+):
 
     """
     Function for resampling spectra (and optionally associated
@@ -165,3 +169,86 @@ def spectres(new_wavs, spec_wavs, spec_fluxes, spec_errs=None, fill=None, verbos
     # Otherwise just return the new_fluxes spectrum array
     else:
         return new_fluxes
+
+
+def spectres(wave_new, wave, flux, ivar=None, fill=None, verbose=False):
+
+    """
+    Function for resampling spectra (and optionally associated
+    uncertainties) onto a new wavelength basis.
+
+    Parameters
+    ----------
+
+    wave_new : numpy.ndarray
+        Array containing the new wavelength sampling desired for the
+        spectrum or spectra.
+
+    wave : numpy.ndarray
+        array containing the current wavelength sampling of the
+        spectrum or spectra.
+
+    flux : numpy.ndarray
+        Array containing spectral fluxes at the wavelengths specified in
+        spec_wavs, last dimension must correspond to the shape of
+        spec_wavs. Extra dimensions before this may be used to include
+        multiple spectra.
+
+    ivar : numpy.ndarray (optional)
+        Array of the same shape as spec_fluxes containing uncertainties
+        associated with each spectral flux value.
+
+    fill : float (optional)
+        Where new_wavs extends outside the wavelength range in spec_wavs
+        this value will be used as a filler in new_fluxes and new_errs.
+
+    verbose : bool (optional)
+        Setting verbose to False will suppress the default warning about
+        new_wavs extending outside spec_wavs and "fill" being used.
+
+    Returns
+    -------
+
+    flux_new : numpy.ndarray
+        Array of resampled flux values, first dimension is the same
+        length as new_wavs, other dimensions are the same as
+        spec_fluxes.
+
+    ivar_new : numpy.ndarray
+        Array of uncertainties associated with fluxes in new_fluxes.
+        Only returned if spec_errs was specified.
+    New bins which include missing data are denoted by nan.
+    """
+    num_spec = flux.shape[0]
+    if wave_new.ndim == 1:
+        wave_new = np.repeat(wave_new[np.newaxis, :], num_spec, axis=0)
+
+    if ivar is not None:
+        ivar = ivar.copy()
+        flux = flux.copy()
+        flux[ivar == 0] = np.nan
+        ivar[ivar == 0] = np.nan
+        flux_new = np.zeros_like(wave_new)
+        err_new = np.zeros_like(wave_new)
+        err = np.sqrt(1 / ivar)
+        for i in range(num_spec):
+            flux_new[i], err_new[i] = _spectres(
+                wave_new[i], wave_new[i], flux[i], err[i], fill=fill, verbose=verbose
+            )
+        ivar_new = 1 / err_new ** 2
+        # ivar_new[np.isnan(ivar_new)] == 0
+        return flux_new, ivar_new
+
+    # Otherwise just return the new_fluxes spectrum array
+    else:
+        flux_new = np.zeros_like(wave_new)
+        for i in range(num_spec):
+            flux_new[i] = _spectres(
+                wave_new[i],
+                wave[i],
+                flux[i],
+                spec_errs=None,
+                fill=fill,
+                verbose=verbose,
+            )
+        return flux_new
