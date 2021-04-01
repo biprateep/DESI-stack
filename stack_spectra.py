@@ -36,11 +36,42 @@ def _redshift(data_in, z_in, z_out, data_type):
 
 
 def _common_grid(flux, wave, ivar, z_in, z_out=0.0, wave_grid=None):
+    """Bring spectra to a common grid
+
+    Parameters
+    ----------
+    flux : np.ndarray
+        numpy array containing the flux grid of shape [num_spectra, num_wavelengths]
+    wave : np.ndarray
+        numpy array containing the wavelength grid of shape [num_wavelengths] or [num_spectra, num_wavelengths]
+    ivar : np.ndarray
+        numpy array containing the inverse variance grid of shape [num_spectra, num_wavelengths]
+    z_in : np.ndarray
+        a 1D numpy array containing the redshifts of each spectra
+    z_out : float, optional
+        common redshift for the output data, by default 0.0
+    wave_grid : np.ndarray, optional
+        a 1D vector containing the wavelength grid for the output, by default None.
+        If set to None, the wavelength grid is linearly spaced between the maximum and minimum
+        possible wavelengths after redshift correction with a bin width of 0.8 Angstrom (DESI default)
+
+    Returns
+    -------
+    flux_new: np.ndarray
+        All the input fluxes brought to a common redshift and wavelength grid.
+        Missing values and extrapolations are denoted with nan.
+    ivar_new: np.ndarray
+        All input inverse variances brought to a common redshift and wavelength grid.
+        Missing values and extrapolations are denoted with nan.
+    wave_grid: np.ndarray
+        The common wavelength grid.
+    """
     # Correct for redshift
     z_out = np.atleast_1d(z_out)
     flux_new = _redshift(flux, z_in, z_out, "flux")
     wave_new = _redshift(wave, z_in, z_out, "wave")
     ivar_new = _redshift(ivar, z_in, z_out, "ivar")
+    # resample to common grid
     if wave_grid is None:
         wave_grid = np.arange(np.min(wave_new), np.max(wave_new), 0.8)
     flux_new, ivar_new = spectres(
