@@ -1,5 +1,7 @@
 import numpy as np
 
+from spectral_resampling import spectres
+
 
 def _redshift(data_in, z_in, z_out, data_type):
     """Redshift Correction for input data
@@ -33,6 +35,15 @@ def _redshift(data_in, z_in, z_out, data_type):
     return data_out
 
 
-def _common_grid(flux, wave, z_in, z_out=0, wave_range=None):
-
-    return NotImplementedError
+def _common_grid(flux, wave, ivar, z_in, z_out=0.0, wave_grid=None):
+    # Correct for redshift
+    z_out = np.atleast_1d(z_out)
+    flux_new = _redshift(flux, z_in, z_out, "flux")
+    wave_new = _redshift(wave, z_in, z_out, "wave")
+    ivar_new = _redshift(ivar, z_in, z_out, "ivar")
+    if wave_grid is None:
+        wave_grid = np.arange(np.min(wave_new), np.max(wave_new), 0.8)
+    flux_new, ivar_new = spectres(
+        wave_grid, wave_new, flux_new, ivar_new, verbose=False, fill=np.nan
+    )
+    return flux_new, ivar_new, wave_grid

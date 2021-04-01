@@ -223,6 +223,8 @@ def spectres(wave_new, wave, flux, ivar=None, fill=None, verbose=False):
     num_spec = flux.shape[0]
     if wave_new.ndim == 1:
         wave_new = np.repeat(wave_new[np.newaxis, :], num_spec, axis=0)
+    if wave.ndim == 1:
+        wave = np.repeat(wave[np.newaxis, :], num_spec, axis=0)
 
     if ivar is not None:
         ivar = ivar.copy()
@@ -234,7 +236,7 @@ def spectres(wave_new, wave, flux, ivar=None, fill=None, verbose=False):
         err = np.sqrt(1 / ivar)
         for i in range(num_spec):
             flux_new[i], err_new[i] = _spectres(
-                wave_new[i], wave_new[i], flux[i], err[i], fill=fill, verbose=verbose
+                wave_new[i], wave[i], flux[i], err[i], fill=fill, verbose=verbose
             )
         ivar_new = 1 / err_new ** 2
         # ivar_new[np.isnan(ivar_new)] == 0
