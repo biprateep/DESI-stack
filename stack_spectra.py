@@ -78,3 +78,64 @@ def _common_grid(flux, wave, ivar, z_in, z_out=0.0, wave_grid=None):
         wave_grid, wave_new, flux_new, ivar_new, verbose=False, fill=np.nan
     )
     return flux_new, ivar_new, wave_grid
+
+
+def _normalize(flux,ivar):
+    """
+    A simple normalization to median=1 for flux
+    Also adjusts inverse variance accordingly
+    
+    Parameters
+    ----------
+    flux: np.ndarray 
+        numpy array containing the flux grid of shape [num_spectra, num_wavelengths]
+        
+    ivar : np.ndarray
+        numpy array containing the inverse variance grid of shape [num_spectra, num_wavelengths]
+    
+    Returns
+    -------
+    flux_new: np.ndarray
+        flux that has been normalized to median one
+        
+    ivar_new: np.ndarray
+        inverse variance that has been multipled by the normalization factor
+        for the flux,squared
+
+    """
+    
+    norm = np.nanmedian(flux,axis=1).reshape(315,1)
+    flux = flux/norm
+    ivar = ivar*norm**2
+    
+    return flux, ivar
+
+def _wavg(flux,weights=None,weighted=False):
+    """
+    Weighted average of the spectra.
+    
+    Parameters
+    ----------
+    flux: np.ndarray 
+        numpy array containing the flux grid of shape [num_spectra, num_wavelengths]
+        
+    weights : np.ndarray
+        numpy array containing the weights grid of shape [num_spectra, num_wavelengths]
+    
+    weighted: True or False
+        if false, use weight=1 for all the spectra
+        else, perform a weighted average using the input for 'weights'
+    
+    """
+    
+    if weighted:
+        num = np.nansum(flux*weights,axis=0)
+        denom = np.nansum(weights,axis=0)
+    
+        if 0. in denom:
+            denom[denom==0.0] = np.nan
+    
+        avg = np.nan_to_num(num/denom)
+    else:
+        avg = np.mean(flux,axis=0)
+    return(avg)
