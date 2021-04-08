@@ -125,6 +125,11 @@ def _wavg(flux,weights=None,weighted=False):
     weighted: True or False
         if false, use weight=1 for all the spectra
         else, perform a weighted average using the input for 'weights'
+        
+    Returns
+    ----------
+    avg: np.ndarray
+        numpy array containing the averaged flux of shape [num_wavelengths]
     
     """
     
@@ -139,3 +144,37 @@ def _wavg(flux,weights=None,weighted=False):
     else:
         avg = np.mean(flux,axis=0)
     return(avg)
+
+
+def _bootstrap(flux_spec,ndata,nbootstraps,len_spec):
+    """
+    Sample the spectra
+    
+    Parameters
+    ----------
+    flux_spec:  np.ndarray 
+        Numpy array containing the flux grid of shape [num_spectra, num_wavelengths]
+        To avoid redundant calculations, this array can be the normalized spectra already
+        brought to the common grid
+        
+    ndata: int
+        The number of spectra to sample from
+        
+    nbootstraps: int
+        The number of times to sample the data
+        
+    len_spec: int
+        The number of wavelengths in the spectra
+        
+    Returns
+    ----------
+    boot: np.ndarray
+        numpy array containing the sampled spectra of shape [nbootsraps, len_spec]
+    
+    """
+    boot = np.zeros((nbootstraps,len_spec))
+    for i in range(nbootstraps):
+        idx=np.random.choice(ndata,1,replace=True)
+        boot[i]+=flux_spec[idx][0]
+    
+    return boot
