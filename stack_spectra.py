@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 
 from spectral_resampling import spectres
@@ -80,181 +81,89 @@ def _common_grid(flux, wave, ivar, z_in, z_out=0.0, wave_grid=None):
     return flux_new, ivar_new, wave_grid
 
 
-def coadd_cameras(spectra, cosmics_nsig=0.0):
+def _coadd_cameras(flux_cam, wave_cam, ivar_cam):
+    """Adds spectra from the three cameras to give on combined spectra per object
 
+    Parameters
+    ----------
+    flux_cam : dict
+        Dictionary containing the flux values from the three cameras
+    wave_cam : dict
+        Dictionary containing the wavelength values from the three cameras
+    ivar_cam : dict
+        Dictionary containing the inverse variance values from the three cameras
+
+    Returns
+    -------
+    Tuple
+        returns the combined flux, wavelength and inverse variance grids.
+    """
     # check_alignement_of_camera_wavelength(spectra)
 
-    log = get_logger()
-
     # ordering
-    mwave = [np.mean(spectra.wave[b]) for b in spectra.bands]
-    sbands = np.array(spectra.bands)[
-        np.argsort(mwave)
-    ]  # bands sorted by inc. wavelength
-    log.debug("wavelength sorted cameras= {}".format(sbands))
+    bands = list(wave_cam.keys())
+    mwave = [np.mean(wave_cam[b]) for b in bands]
+    sbands = np.array(bands)[np.argsort(mwave)]  # bands sorted by inc. wavelength
 
     # create wavelength array
     wave = None
     tolerance = 0.0001  # A , tolerance
     for b in sbands:
         if wave is None:
-            wave = spectra.wave[b]
+            wave = wave_cam[b]
         else:
-            wave = np.append(
-                wave, spectra.wave[b][spectra.wave[b] > wave[-1] + tolerance]
-            )
+            wave = np.append(wave, wave_cam[b][wave_cam[b] > wave[-1] + tolerance])
     nwave = wave.size
 
     # check alignment
     number_of_overlapping_cameras = np.zeros(nwave)
-    for b in spectra.bands:
+    for b in bands:
         windices = np.argmin(
             (
-                np.tile(wave, (spectra.wave[b].size, 1))
-                - np.tile(spectra.wave[b], (wave.size, 1)).T
+                np.tile(wave, (wave_cam[b].size, 1))
+                - np.tile(wave_cam[b], (wave.size, 1)).T
             )
             ** 2,
             axis=1,
         )
-        dist = np.sqrt(np.max(spectra.wave[b] - wave[windices]))
-        log.debug("camera {} max dist= {}A".format(b, dist))
+        dist = np.sqrt(np.max(wave_cam[b] - wave[windices]))
+
         if dist > tolerance:
-            log.error(
-                "Cannot directly coadd the camera spectra because wavelength are not aligned, use --lin-step or --log10-step to resample to a common grid"
+            print(
+                "Cannot directly coadd the camera spectra because wavelength are not aligned,use --lin-step or --log10-step to resample to a common grid"
             )
             sys.exit(12)
         number_of_overlapping_cameras[windices] += 1
-
     # targets
-    targets = np.unique(spectra.fibermap["TARGETID"])
-    ntarget = targets.size
-    log.debug("number of targets= {}".format(ntarget))
-
-    # ndiag = max of all cameras
-    ndiag = 0
-    for b in sbands:
-        ndiag = max(ndiag, spectra.resolution_data[b].shape[1])
-    log.debug("ndiag= {}".format(ndiag))
+    # TODO Add assertions to check all the input sizes are correct
 
     b = sbands[0]
-    flux = np.zeros((ntarget, nwave), dtype=spectra.flux[b].dtype)
-    ivar = np.zeros((ntarget, nwave), dtype=spectra.ivar[b].dtype)
-    if spectra.mask is not None:
-        ivar_unmasked = np.zeros((ntarget, nwave), dtype=spectra.ivar[b].dtype)
-        mask = np.zeros((ntarget, nwave), dtype=spectra.mask[b].dtype)
-    else:
-        ivar_unmasked = ivar
-        mask = None
+    ntarget = len(flux_cam[b])
+    flux = np.zeros((ntarget, nwave), dtype=flux_cam[b].dtype)
+    ivar = np.zeros((ntarget, nwave), dtype=flux_cam[b].dtype)
 
-    rdata = np.zeros((ntarget, ndiag, nwave), dtype=spectra.resolution_data[b].dtype)
-
-    for b in spectra.bands:
-        log.debug("coadding band '{}'".format(b))
+    for b in bands:
 
         # indices
         windices = np.argmin(
             (
-                np.tile(wave, (spectra.wave[b].size, 1))
-                - np.tile(spectra.wave[b], (wave.size, 1)).T
+                np.tile(wave, (wave_cam[b].size, 1))
+                - np.tile(wave_cam[b], (wave.size, 1)).T
             )
             ** 2,
             axis=1,
         )
 
-        band_ndiag = spectra.resolution_data[b].shape[1]
+        for i in range(ntarget):
+            ivar[i, windices] += ivar_cam[b][i]
+            flux[i, windices] += ivar_cam[b][i] * flux_cam[b][i]
 
-        fiberstatus_bits = get_all_fiberbitmask_with_amp(b)
-        good_fiberstatus = (spectra.fibermap["FIBERSTATUS"] & fiberstatus_bits) == 0
-        for i, tid in enumerate(targets):
-            jj = np.where((spectra.fibermap["TARGETID"] == tid) & good_fiberstatus)[0]
-
-            # - if all spectra were flagged as bad (FIBERSTATUS != 0), contine
-            # - to next target, leaving tflux and tivar=0 for this target
-            if len(jj) == 0:
-                continue
-
-            ivar_unmasked[i, windices] += np.sum(spectra.ivar[b][jj], axis=0)
-
-            if spectra.mask is not None:
-                ivarjj = spectra.ivar[b][jj] * (spectra.mask[b][jj] == 0)
-            else:
-                ivarjj = spectra.ivar[b][jj]
-
-            ivar[i, windices] += np.sum(ivarjj, axis=0)
-            flux[i, windices] += np.sum(ivarjj * spectra.flux[b][jj], axis=0)
-            for r in range(band_ndiag):
-                rdata[i, r + (ndiag - band_ndiag) // 2, windices] += np.sum(
-                    (spectra.ivar[b][jj] * spectra.resolution_data[b][jj, r]), axis=0
-                )
-            if spectra.mask is not None:
-                # this deserves some attention ...
-
-                tmpmask = np.bitwise_and.reduce(spectra.mask[b][jj], axis=0)
-
-                # directly copy mask where no overlap
-                jj = number_of_overlapping_cameras[windices] == 1
-                mask[i, windices[jj]] = tmpmask[jj]
-
-                # 'and' in overlapping regions
-                jj = number_of_overlapping_cameras[windices] > 1
-                mask[i, windices[jj]] = mask[i, windices[jj]] & tmpmask[jj]
-
-    for i, tid in enumerate(targets):
+    for i in range(ntarget):
         ok = ivar[i] > 0
         if np.sum(ok) > 0:
             flux[i][ok] /= ivar[i][ok]
-        ok = ivar_unmasked[i] > 0
-        if np.sum(ok) > 0:
-            rdata[i][:, ok] /= ivar_unmasked[i][ok]
 
-    if "COADD_NUMEXP" in spectra.fibermap.colnames:
-        fibermap = spectra.fibermap
-    else:
-        fibermap = coadd_fibermap(spectra.fibermap)
-
-    bands = ""
-    for b in sbands:
-        bands += b
-
-    if spectra.mask is not None:
-        dmask = {
-            bands: mask,
-        }
-    else:
-        dmask = None
-
-    res = Spectra(
-        bands=[
-            bands,
-        ],
-        wave={
-            bands: wave,
-        },
-        flux={
-            bands: flux,
-        },
-        ivar={
-            bands: ivar,
-        },
-        mask=dmask,
-        resolution_data={
-            bands: rdata,
-        },
-        fibermap=fibermap,
-        meta=spectra.meta,
-        extra=spectra.extra,
-        scores=None,
-    )
-
-    if spectra.scores is not None:
-        orig_scores = spectra.scores.copy()
-        orig_scores["TARGETID"] = spectra.fibermap["TARGETID"]
-    else:
-        orig_scores = None
-
-    compute_coadd_scores(res, orig_scores, update_coadd=True)
-
-    return res
+    return flux, wave, ivar
 
 
 def _normalize(flux, ivar):
