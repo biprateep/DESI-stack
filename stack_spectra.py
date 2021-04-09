@@ -181,10 +181,10 @@ def _normalize(flux, ivar):
 
     Returns
     -------
-    flux_new: np.ndarray
+    flux: np.ndarray
         flux that has been normalized to median one
 
-    ivar_new: np.ndarray
+    ivar: np.ndarray
         inverse variance that has been multipled by the normalization factor
         for the flux,squared
 
