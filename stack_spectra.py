@@ -324,26 +324,16 @@ def _wavg(flux, weights=None, weighted=False):
     return avg
 
 
-def _bootstrap(flux, wave, ivar, z_in, z_out=0.0, wave_grid=None, ndata, nbootstraps, len_spec):
+def _bootstrap(flux_spec, ndata, nbootstraps, len_spec):
     """
     Sample the spectra
 
     Parameters
     ----------
-    flux : np.ndarray
-        numpy array containing the flux grid of shape [num_spectra, num_wavelengths]
-    wave : np.ndarray
-        numpy array containing the wavelength grid of shape [num_wavelengths] or [num_spectra, num_wavelengths]
-    ivar : np.ndarray
-        numpy array containing the inverse variance grid of shape [num_spectra, num_wavelengths]
-    z_in : np.ndarray
-        a 1D numpy array containing the redshifts of each spectra
-    z_out : float, optional
-        common redshift for the output data, by default 0.0
-    wave_grid : np.ndarray, optional
-        a 1D vector containing the wavelength grid for the output, by default None.
-        If set to None, the wavelength grid is linearly spaced between the maximum and minimum
-        possible wavelengths after redshift correction with a bin width of 0.8 Angstrom (DESI default)
+    flux_spec:  np.ndarray
+        Numpy array containing the flux grid of shape [num_spectra, num_wavelengths]
+        To avoid redundant calculations, this array can be the normalized spectra already
+        brought to the common grid
 
     ndata: int
         The number of spectra to sample from
@@ -365,4 +355,7 @@ def _bootstrap(flux, wave, ivar, z_in, z_out=0.0, wave_grid=None, ndata, nbootst
         idx = np.random.choice(ndata, 1, replace=True)
         boot[i] += flux_spec[idx][0]
 
+    avg = _wavg(boot, weights=None, weighted=False)
+        
+        
     return boot
