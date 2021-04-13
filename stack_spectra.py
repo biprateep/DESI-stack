@@ -288,7 +288,7 @@ def _normalize(flux, ivar):
     return flux, ivar
 
 
-def _wavg(flux, weights=None, weighted=False):
+def _wavg(flux,ivar=None,weighted=False, weights = None):
     """
     Weighted average of the spectra.
 
@@ -296,6 +296,9 @@ def _wavg(flux, weights=None, weighted=False):
     ----------
     flux: np.ndarray
         numpy array containing the flux grid of shape [num_spectra, num_wavelengths]
+        
+    ivar : np.ndarray
+        numpy array containing the inverse variance grid of shape [num_spectra, num_wavelengths]
 
     weights : np.ndarray
         numpy array containing the weights grid of shape [num_spectra, num_wavelengths]
@@ -312,16 +315,19 @@ def _wavg(flux, weights=None, weighted=False):
     """
 
     if weighted:
-        num = np.nansum(flux * weights, axis=0)
-        denom = np.nansum(weights, axis=0)
-
-        if 0.0 in denom:
-            denom[denom == 0.0] = np.nan
-
-        avg = np.nan_to_num(num / denom)
+        num = np.nansum(flux*weights,axis=0)
+        denom = np.nansum(weights,axis=0)
+    
+        if 0. in denom:
+            denom[denom==0.0] = np.nan
+    
+        avg = np.nan_to_num(num/denom)
     else:
-        avg = np.mean(flux, axis=0)
-    return avg
+        avg = np.mean(flux,axis=0)
+        
+    ivar = np.nansum(ivar,axis = 0)
+    
+    return avg, ivar
 
 
 def _bootstrap(flux_spec, ndata, nbootstraps, len_spec):
@@ -340,22 +346,30 @@ def _bootstrap(flux_spec, ndata, nbootstraps, len_spec):
 
     nbootstraps: int
         The number of times to sample the data
+    
+    nsamples: int
+        The number of bootstraps to do
 
     len_spec: int
         The number of wavelengths in the spectra
 
     Returns
     ----------
-    boot: np.ndarray
-        numpy array containing the sampled spectra of shape [nbootsraps, len_spec]
+    stacks: np.ndarray
+        numpy array containing the stacked spectra from the bootstraps of size [nsamples, len_spec]
+        
+    ivar: np.ndarray
+        numpy array of size [len_spec] containing the inverse variance calculated from all the stacks 
 
     """
-    boot = np.zeros((nbootstraps, len_spec))
-    for i in range(nbootstraps):
-        idx = np.random.choice(ndata, 1, replace=True)
-        boot[i] += flux_spec[idx][0]
-
-    avg = _wavg(boot, weights=None, weighted=False)
-        
-        
-    return boot
+    stacks = np.zeros((nbootstraps,len_spec))
+    for j in range(nbootstraps):
+        boot = np.zeros((nsamples,len_spec))
+        for i in range(nsamples):
+            idx=np.random.choice(ndata,1,replace=True)
+            boot[i]+=flux_spec[idx][0]
+        stacks[j] += wavg(boot)
+    
+    ivar = 1.0/(np.nanstd(stacks,axis=0))**2
+    
+    return stacks,ivar
