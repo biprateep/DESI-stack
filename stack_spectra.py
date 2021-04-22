@@ -265,3 +265,11 @@ def _bootstrap(flux_spec, ndata, nbootstraps, len_spec):
         boot[i] += flux_spec[idx][0]
 
     return boot
+
+
+def stack_spectra(flux, wave, ivar, sky=None, bootstrap=False):
+    """
+    If flux/wave.ivar are dicts, coadd cameras.
+    If sky is present model ivar and do modelled ivar weighted avg
+    """
+    raise NotImplementedError
