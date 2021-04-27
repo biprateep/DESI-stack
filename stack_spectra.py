@@ -1,6 +1,10 @@
 import sys
 import numpy as np
-
+from scipy.interpolate import interp1d
+from scipy.ndimage import median_filter
+from scipy.stats import binned_statistic
+from sklearn.preprocessing import  PolynomialFeatures
+from sklearn.linear_model import LinearRegression
 from spectral_resampling import spectres
 
 
@@ -271,7 +275,7 @@ def _bootstrap(flux_spec, ndata, nbootstraps, len_spec):
         numpy array of size [len_spec] containing the inverse variance calculated from all the stacks 
 
     """
-<<<<<<< HEAD
+
     boot = np.zeros((nbootstraps, len_spec))
     for i in range(nbootstraps):
         idx = np.random.choice(ndata, 1, replace=True)
@@ -298,3 +302,40 @@ def stack_spectra(flux, wave, ivar, sky=None, bootstrap=False):
     
     return stacks,ivar
 
+def model_ivar(ivar, sky_ivar, wave):
+    n_obj = len(sky_ivar)
+    sky_var = 1/sky_ivar
+
+    ivar_model = np.zeros_like(ivar)
+
+    for i in range(n_obj):
+        sky_mask = np.isfinite(sky_var[i])
+        sky_var_interp = interp1d(wave[sky_mask], sky_var[i][sky_mask], fill_value="extrapolate", axis=-1)
+        sky_var[i] = sky_var_interp(wave)
+        sky_var[i] = sky_var[i]/median_filter(sky_var[i], 100) #takes out the overall shape of sky var
+
+        #Create polunomial function of wavelength
+        poly_feat_m = PolynomialFeatures(3)
+        poly_feat_c = PolynomialFeatures(3)
+        coef_m = poly_feat_m.fit_transform(wave[:,np.newaxis])
+        coef_c = poly_feat_c.fit_transform(wave[:,np.newaxis])
+
+
+        obj_var = 1/(ivar[i])
+        obj_mask = np.isfinite(obj_var) #TODO Check for Nan values here
+        obj_back = median_filter(obj_var[obj_mask],100, mode="nearest") 
+        X = np.concatenate([(coef_m*sky_var[i][:,np.newaxis])[obj_mask], coef_c[obj_mask]], axis =1)+obj_back[:, np.newaxis]
+        Y = obj_var[obj_mask]
+        model = LinearRegression(fit_intercept=False, n_jobs=-1)
+        model.fit(X,Y)
+        y_predict = model.predict(X)
+        residual = (Y-y_predict)/Y
+        #correct for the overall shape of the residuals
+        wave_bins = np.arange(wave.min(), wave.max(), 500)
+        binned_residual, _, _ = binned_statistic(wave[obj_mask], residual, statistic="median", bins=wave_bins)
+        interp_binned_res = interp1d((wave_bins[1:]+wave_bins[:-1])/2, binned_residual, kind="cubic", fill_value="extrapolate")
+        large_res = interp_binned_res(wave[obj_mask])
+        y_pred_adjust = large_res*Y + y_predict
+        ivar_model[i][obj_mask] = 1/y_pred_adjust
+        ivar_model[i][~obj_mask] = 0
+    return ivar_model
