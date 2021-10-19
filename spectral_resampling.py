@@ -1,3 +1,45 @@
+from __future__ import print_function, division, absolute_import
+
+from numba import njit
+import numpy as np
+
+
+# @njit
+def linear_interp_resampler(wave_new, wave, flux, err=None):
+    """
+    Call interpolation, repackage new spectra
+
+
+    Parameters
+    ----------
+    orig_spectrum : `~specutils.Spectrum1D`
+        The original 1D spectrum.
+    fin_spec_axis : ndarray
+        The desired spectral axis array.
+
+    Returns
+    -------
+    resample_spectrum : `~specutils.Spectrum1D`
+        An output spectrum containing the resampled `~specutils.Spectrum1D`
+    """
+
+    fill_val = np.nan
+    flux_new = np.interp(wave_new, wave, flux, left=fill_val, right=fill_val)
+
+    new_unc = None
+    if err is not None:
+        err_new = np.interp(
+            wave_new,
+            wave,
+            err,
+            left=fill_val,
+            right=fill_val,
+        )
+        return flux_new, err_new
+
+    return flux_new
+
+
 """ 
 Vectorized implementation of the Flux Conserving resampler.
 The implementation in `desispec` is not vectorized along the sample axis.
@@ -6,11 +48,6 @@ Implements the equations from: https://ui.adsabs.harvard.edu/abs/2017arXiv170505
 Coed still involves a bunch of loops which can be eliminated using more vectorization or JIT
 Look at the code from specutils for inspiration
 """
-
-from __future__ import print_function, division, absolute_import
-
-from numba import njit
-import numpy as np
 
 
 def make_bins(wavs):
@@ -172,7 +209,9 @@ def _spectres(
         return new_fluxes
 
 
-def spectres(wave_new, wave, flux, ivar=None, fill=None, verbose=False):
+def resample_spectra(
+    wave_new, wave, flux, ivar=None, fill=None, method="linear", verbose=False
+):
 
     """
     Function for resampling spectra (and optionally associated
@@ -202,7 +241,9 @@ def spectres(wave_new, wave, flux, ivar=None, fill=None, verbose=False):
     fill : float (optional)
         Where new_wavs extends outside the wavelength range in spec_wavs
         this value will be used as a filler in new_fluxes and new_errs.
-
+    method : str (optional)
+        choose from `linear` or `flux_cons`.
+        Use a linear resampled spectra or flux conserving resampler.
     verbose : bool (optional)
         Setting verbose to False will suppress the default warning about
         new_wavs extending outside spec_wavs and "fill" being used.
@@ -220,7 +261,8 @@ def spectres(wave_new, wave, flux, ivar=None, fill=None, verbose=False):
         Only returned if spec_errs was specified.
     New bins which include missing data are denoted by nan.
     """
-    num_spec = flux.shape[0]
+    num_spec = len(flux)
+    # TODO depending on num_spec choose whether to JIT or not
     if wave_new.ndim == 1:
         wave_new = np.repeat(wave_new[np.newaxis, :], num_spec, axis=0)
     if wave.ndim == 1:
@@ -234,9 +276,13 @@ def spectres(wave_new, wave, flux, ivar=None, fill=None, verbose=False):
         flux_new = np.zeros_like(wave_new)
         err_new = np.zeros_like(wave_new)
         err = np.sqrt(1 / ivar)
+        # for i in range(num_spec):
+        #     flux_new[i], err_new[i] = _spectres(
+        #         wave_new[i], wave[i], flux[i], err[i], fill=fill, verbose=verbose
+        #     )
         for i in range(num_spec):
-            flux_new[i], err_new[i] = _spectres(
-                wave_new[i], wave[i], flux[i], err[i], fill=fill, verbose=verbose
+            flux_new[i], err_new[i] = linear_interp_resampler(
+                wave_new[i], wave[i], flux[i], err[i]
             )
         ivar_new = 1 / err_new ** 2
         # ivar_new[np.isnan(ivar_new)] == 0
