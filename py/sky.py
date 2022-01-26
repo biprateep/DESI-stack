@@ -6,6 +6,8 @@ import numpy as np
 import desispec.io
 import desispec.fluxcalibration
 
+# TODO: Parallelization should be done in the target dimension if decided to run on all targets
+
 
 def _preprocess_sky_frame(
     night, exp, petal, fiber, camera, spectro_redux_path, release, **kwargs
