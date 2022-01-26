@@ -40,32 +40,28 @@ def _preprocess_sky_frame(
 def get_sky(
     spectra=None, fibermap=None, exp_fibermap=None, release="everest", n_workers=-1,
 ):
-    """[summary]
+    """Get equivalent sky spectra for a set of coadded spectra.
 
     Parameters
     ----------
-    spectra : [type], optional
-        [description], by default None
-    fibermap : [type], optional
-        [description], by default None
-    exp_fibermap : [type], optional
-        [description], by default None
+    spectra : desispec.spectra.Spectra,
+        coadded spectra as a desispec object, by default None.
+    fibermap : astropy.Table, optional
+        If spectra object is not provided alternatively,
+        fibermap and exp_fibermap may be provided, by default None.
+    exp_fibermap : astropy.Table, optional
+        If spectra object is not provided alternatively,
+        fibermap and exp_fibermap may be provided, by default None.
     release : str, optional
-        [description], by default "everest"
+        Name of data release, by default "everest".
     n_workers : int, optional
-        [description], by default -1
+        Number of CPUs to spread the IO on. Vaulues<=0 will use all available CPUs, by default -1.
 
     Returns
     -------
-    [type]
-        [description]
+    tuple of dictionaries
+        sky_flux, sky_mask values for all the spectra broken in terms of camera.
 
-    Raises
-    ------
-    ValueError
-        [description]
-    ValueError
-        [description]
     """
     if (spectra is None) and (fibermap is None) and (exp_fibermap is None):
         raise ValueError("Either spectra or fibermap and exp_fibermap must be provided")
