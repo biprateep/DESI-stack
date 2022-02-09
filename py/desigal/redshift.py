@@ -3,13 +3,20 @@ import numpy as np
 # Todo: Take desispec.Spectra as input, propagate masks, add checks.
 
 
+def _redshift(data_in, z_in, z_out, exponent):
+    """Implements the basic redshift equation"""
+    data_out = np.atleast_2d(data_in)
+    return data_out * (((1 + z_out) / (1 + z_in)) ** exponent)
+
+
 def redshift(data_in, z_in, z_out, data_type):
     """Redshift Correction for input data
 
     Parameters
     ----------
-    data_in : numpy.ndarray
+    data_in : numpy.ndarray or dict.
         Input data which is either flux values, wavelengths or ivars.
+        They can be a single numpy array (i.e. camera coadded) or a dict with each camera.
         Default DESI units are assumed.
     z_in : float or numpy.ndarray
         input redshifts
@@ -23,13 +30,20 @@ def redshift(data_in, z_in, z_out, data_type):
     numpy.ndarray
         redshift corrected value corresponding to data type
     """
+
     exponent_dict = {"flux": -1, "wave": 1, "ivar": 2}
     assert data_type in exponent_dict.keys(), "Not a valid Data Type"
-    data_in = np.atleast_2d(data_in)
 
     if z_in.ndim == 1:
         z_in = z_in[:, np.newaxis]
     exponent = exponent_dict[data_type]
-    data_out = data_in * (((1 + z_out) / (1 + z_in)) ** exponent)
 
-    return data_out
+    if isinstance(data_in, np.ndarray):
+        return _redshift(data_in, z_in, z_out, exponent)
+    if isinstance(data_in, dict):
+        data_out = {}
+        for key in data_in.keys():
+            data_out[key] = _redshift(data_in[key], z_in, z_out, exponent)
+        return data_out
+    else:
+        raise ValueError("Input data not of a valid type")
