@@ -83,7 +83,7 @@ def coadd_cameras(flux_cam, wave_cam, ivar_cam, mask_cam=None):
 
     if wave_cam[blue].ndim == 1:
         wave = np.squeeze(wave)
-    if mask is not None:
+    if mask_cam is not None:
         return flux, wave, ivar, mask
     else:
         return flux, wave, ivar

@@ -1,10 +1,8 @@
 from __future__ import print_function, division, absolute_import
 
-from numba import njit
 import numpy as np
 
 
-# @njit
 def linear_interp_resampler(wave_new, wave, flux, err=None):
     """
     Call interpolation, repackage new spectra
@@ -209,7 +207,7 @@ def _spectres(
         return new_fluxes
 
 
-def resample_spectra(
+def resample(
     wave_new, wave, flux, ivar=None, fill=None, method="linear", verbose=False
 ):
 
